@@ -1,5 +1,5 @@
-name: mad-dev-guides-m4
-title: Module 4 - Manage and secure APIs 
+name: app-mod-ilt-m1
+title: Module 1 - Demo Migrating a VM to OpenShift
 version: main
 nav:
   - modules/ROOT/nav.adoc
