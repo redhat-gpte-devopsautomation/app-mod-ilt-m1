@@ -142,7 +142,7 @@ If your namespace does not have the correct toleration the migration process wil
 
 === Set up Virtualization Provider in MTV
 
-. Log into the OpenShift link:https://console-openshift-console.apps.%SUBDOMAIN%[Web Console^] using the OpenShift admin credentials provided by the service.
+. Log into the link:https://console-openshift-console.%SUBDOMAIN%[OpenShift Web Console^] using the OpenShift admin credentials provided by the service.
 +
 .Admin Password redacted in screenshot
 image::admin_credentials.png[width=40%]
