@@ -1,2 +1,2 @@
-* xref:introduction.adoc[Introduction]
-* xref:migratevm.adoc[Migrate a VM to OpenShift]
+* xref:1-introduction.adoc[Introduction]
+* xref:2-migratevm.adoc[Migrate a VM to OpenShift]

@@ -16,6 +16,22 @@ Your instructor will now demonstrate the steps it took to move the VM from Red H
 The steps to move a VM from another virtualization environment like VMware VSphere would be almost identical.
 ====
 
+== Log in to the Bastion VM of your environment
+
+You will need access to the command line tools for some of the migration steps. Set up your command line environment.
+
+. From the *Services* page of your Workshop find the *hostname*, *user* and *password* for the VM.
++
+image::bastion_access.png[width=60%]
+
+. Open a Terminal Window and connect to your bastion VM:
++
+.Using the examples from the screenshot:
+[source,sh]
+----
+ssh lab-user@bastion.lbm96.sandbox1264.opentlc.com
+----
+
 == Access the Customer Data VM
 
 The RHV environment not only has the Oracle Database VM deployed but it also hosts another VM which runs the old customer application on top of Apache Tomcat.
@@ -24,7 +40,7 @@ From a terminal window you can use `curl` to demonstrate that the application is
 
 Use the IP Address of the *Customer Service (Tomcat VM)* to access the customer service. You can run the following _curl_ command in the VS Code server's terminal or your local environment since the Tomcat IP address is publicly accessible. 
 
-Run the following `curl` commands in the VS Code server terminal.
+Run the following `curl` commands in the terminal.
 
 [.console-input]
 [source,bash]
@@ -56,7 +72,9 @@ The output should look like:
 {"id":2,"username":"hate_guybrush","name":"Pirate","surname":"Lechuck","address":"Caverns of Meat, no number","zipCode":"MO-666","city":"Giant Monkey Head","country":"Monkey Island"}
 ----
 
-== Migrate the Oracle VM from RHV to OpenShift
+This proves that your customers VM and Oracle database VM are working properly.
+
+== Modernizing the customers application
 
 The steps you will follow to migrate the *customers* service from Red Hat Virtualization to Red Hat OpenShift Container Platform are as follows:
 
@@ -68,6 +86,8 @@ The steps you will follow to migrate the *customers* service from Red Hat Virtua
 * Update the configuration for the *gateway* service to now point to the modernized *customer* service.
 * Demonstrate that your *frontend* service still works as before.
 
+In this section you will demonstrate migrating the VM to OpenShift.
+
 === Migrate the Oracle VM from RHV to OpenShift
 
 ==== Prerequisites
@@ -78,8 +98,10 @@ From the RHPDS Workshop Service page find the following properties:
 
 * The *Hostname* of the RHV host
 * The *User ID* and *password* for the migration user - this is a specific user that can see most of what's available but only manipulate your specific VMs. You need this to connect to RHV.
++
+image::rhv_access.png[width=60%]
 
-. Download the CA Certificate for your RHV environment. You need to do that on your laptop because you will need to drag the file into the MTV console later.
+. Download the CA Certificate for your RHV environment. *You need to do that on your laptop, _not the terminal_, because you will need to drag the file into the MTV console later.*
 +
 [source,sh]
 ----
@@ -94,7 +116,7 @@ wget -O $HOME/pki-resource.cer --no-check-certificate "https://${RHV_HOSTNAME}/o
 .. On most systems this will download a file `pki-resource.cer` into your `Downloads` folder.
 .. Take a note where this file got downloaded to. You will need it a little bit later.
 
-. Create a project in OpenShift for the migrated VM
+. From your terminal create a project in OpenShift for the migrated VM
 +
 [source,sh]
 ----
@@ -104,24 +126,43 @@ wget -O $HOME/pki-resource.cer --no-check-certificate "https://${RHV_HOSTNAME}/o
 oc new-project retail
 ----
 
+. The shared OpenShift cluster has only one or two nodes that are capable of running VMs. These are _metal_ instances on AWS. To ensure that only VMs are running on these nodes the nodes are _tainted_. Which means you must add a matching _toleration_ to your VM to allow it to run on the metal nodes.
++
+The easiest way of adding a matching _toleration_ is to automatically add the _toleration_ to all pods in a project. This can be done by adding an annotation to the namespace that underlies your project.
++
+[source,sh]
+----
+oc annotate namespace retail scheduler.alpha.kubernetes.io/defaultTolerations='[{"operator": "Exists", "key": "metal"}]'
+----
+
+[WARNING]
+====
+If your namespace does not have the correct toleration the migration process will fail and your VM will not start.
+====
+
 === Set up Virtualization Provider in MTV
 
-. Log into the OpenShift Web Console using the URL and *admin* credentials provided
+. Log into the OpenShift link:https://console-openshift-console.apps.%SUBDOMAIN%[Web Console^] using the OpenShift admin credentials provided by the service.
++
+.Admin Password redacted in screenshot
+image::admin_credentials.png[width=40%]
+
 . On the left click on *Virtualization* -> *Virtual Machines*
+.. You will see that when *All Projects* is selected there are already VMs named `oracle-database` available for each user.
 . From the *Projects* drop down select the *retail* project that you just created.
-.. There are no Virtual Machines yet.
+.. There are no Virtual Machines yet since you just created that project.
 . Click *Launch Migration Tool* to launch the OpenShift Migration Toolkit for Virtualization.
-. Log in using your *admin* credentials
+. Log in using your *admin* credentials (the same you used to log into the OpenShift Web Console).
 .. If this is the first time you are logging in click the blue *Get started* button.
 . On the list of *Providers* click *Add provider*
-. Select *Red Hat Virtualization* from the list of providers. Fill in the information from your e-mail:
-.. *Name*: `RHV`
-.. *RHV Manager host name or IP address*: The hostname from your e-mail. For example `rhvm.dev.cnv.infra.opentlc.com`
-.. *RHV Manager user name*: the username from your e-mail. For example `migrateuser-wkama@internal`
-.. *RHV Manager passsword*: the password from yoru e-mail. For example `niIEPihdCR7I`
+. Select *Red Hat Virtualization* from the list of providers. Fill in the information from service page:
+.. *Name*: `rhv` (only lowercase characters allowed)
+.. *RHV Manager host name or IP address*: The hostname from service page. For example `rhvm.dev.cnv.infra.opentlc.com`
+.. *RHV Manager user name*: the username from service page. For example `migrateuser-lbm96@internal`
+.. *RHV Manager passsword*: the password from service page. For example `ALrqghRCZrVk`
 .. *CA Certificate*: Drop the previously downloaded CA Certificate File
 .. Click *Add*.
-. MTV will validate your provider and after a few seconds the status should switch to *Ready*.
+. MTV will validate your provider and after a few seconds the `rhv provider` status should switch to *Ready*.
 
 === Create and execute Migration Plan
 
@@ -129,18 +170,18 @@ oc new-project retail
 . Click *Create Plan*
 . On the *General* page use the following parameters:
 .. *Plan name*: `customers-database`
-.. *Source provider*: select the *RHV* source provider you previously created
+.. *Source provider*: select the *rhv* source provider you previously created
 .. *Target provider*: select *host* (the OpenShift cluster you are currently on)
 .. *Target namespace*: select *retail*
 . Click *Next*
 . On the *VM Selection / Filter* page select the checkbox next to *All datacenters*
 . Click *Next*
-. On the *VM Selection / Select VMs* page select the VM that got created for you. You will find the name in your welcome e-mail (future). The name will be something like *oracle-XXXXX* where XXXXX is your GUID.
+. On the *VM Selection / Select VMs* page select the VM that got created for you. You will find the name in your welcome e-mail (future). The name will be something like *oracle-XXXXX* where XXXXX is your GUID. You only have permissions to manipulate your own VM so double check that you select the correct one.
 . Click *Next*
 . On the *Network Mapping* page click on *Select a network mapping* and select *Create a network mapping*.
 . Leave the defaults and click *Next*
 . On the *Storage Mapping* page click on *Select a storage mapping* and select *Create a storage mapping*.
-. Change the *Target Storage Class* to `ceph-xxxx` and click *Next*
+. The default Storage Class should already be selected for the *Target Storage Class*. Double check that `ocs-storagecluster-ceph-rbd (default)` is selected and click *Next*
 . On the *Type* page select *Cold migration* and click *Next*
 . On the *Hooks* page click *Next*
 . On the *Review* page click *Finish*
@@ -155,6 +196,15 @@ The migration will take about 15-25 minutes after which you will have a running 
 
 Once the migration succeeds you will find a VM called `oracle-xxxxx` in your retail namespace.
 
+[TIP]
+====
+While the migration is running feel free to discuss the already migrated VMs in the user's projects.
+
+Explain the VM, DataVolume, Service.
+
+Also in the `retail` project you will find a pod called `importer-customers-database-xxxxxxxxxxx`. Tailing the logs of that pod shows the import progress. You can also show the progress by showing the `DataVolume`.
+====
+
 === Post Migration Tasks:
 
 The VM is not yet reachable from other applications on the cluster. You will need to add a label to the VM and then create a service to be able to connect to the database on the VM.
@@ -165,10 +215,42 @@ Both tasks are achieved by using the `virtctl expose` command. `virtctl` is the 
 +
 [source,sh]
 ----
-virtctl expose restart oracle-${GUID} -n retail
+virtctl expose vm oracle-${GUID} --port=1521 --name=oracle-${GUID} -n retail
 ----
 
-. Double check that the created service has the endpoint for the Oracle VM pod as an Endpoint:
+. Show the labels that got created:
++
+[source,sh]
+----
+oc get vm oracle-${GUID} -o json -n retail | jq .spec.template.metadata.labels
+----
++
+.Sample Output
+[source,text]
+----
+{
+  "kubevirt.io/domain": "oracle-lbm96",
+  "kubevirt.io/size": "medium"
+}
+----
+
+. Show the selector that got created for the service:
++
+[source,sh]
+----
+oc get svc oracle-${GUID} -o json -n retail | jq .spec.selector
+----
++
+.Sample Output
+[source,text]
+----
+{
+  "kubevirt.io/domain": "oracle-lbm96",
+  "kubevirt.io/size": "medium"
+}
+----
+
+. Once the VM is running show that the created service has the endpoint for the Oracle VM pod as an Endpoint:
 +
 [source,sh]
 ----
@@ -178,22 +260,19 @@ oc describe svc oracle-${GUID} -n retail
 .Sample Output
 [source,texinfo]
 ----
-Name:              oracle-wkama
+Name:              oracle-lbm96
 Namespace:         retail
-Labels:            app=oracle-wkama
+Labels:            <none>
 Annotations:       <none>
-Selector:          app=oracle-wkama
+Selector:          kubevirt.io/domain=oracle-lbm96,kubevirt.io/size=medium
 Type:              ClusterIP
 IP Family Policy:  SingleStack
 IP Families:       IPv4
-IP:                172.30.4.130
-IPs:               172.30.4.130
-Port:              1521-1521  1521/TCP
+IP:                172.30.32.94
+IPs:               172.30.32.94
+Port:              <unset>  1521/TCP
 TargetPort:        1521/TCP
-Endpoints:         10.128.1.14:1521
-Port:              2022-22  2022/TCP
-TargetPort:        22/TCP
-Endpoints:         10.128.1.14:22
+Endpoints:         10.130.2.17:1521
 Session Affinity:  None
 Events:            <none>
 ----
