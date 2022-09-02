@@ -1,25 +1,201 @@
 :icons: font
 :imagesdir: ../assets/images
 
-= Migrate a VM to OpenShift
+= Instructor Demo: Migrate the Customers Database VM
 
-You need a Red Hat account to provision Red Hat cloud services. Follow the instructions to create a Red Hat account:
+The first step is to migrate the existing Oracle database from Red Hat Virtualization to OpenShift. The OpenShift Migration Toolkit for Virtualization offers capabilities to migrate VMs from various virtualization providers.
 
-. In a browser window, navigate to the Red Hat Hybrid Cloud console at link:https://console.redhat.com[console.redhat.com,role=external,window=_blank]. You are redirected to the login page.
-. Click the *Register for a Red Hat account* link to create a Red Hat account.
+The Migration Toolkit for Virtualization requires cluster-admin privileges. Therefore it is not possible for students to migrate their own VM.
+
+In your project `retail-%USERID%` you will find an already deployed copy of the Oracle VM running on OpenShift Virtualization.
+
+Your instructor will now demonstrate the steps it took to move the VM from Red Hat Virtualization to OpenShift Virtualization.
+
+[NOTE]
+====
+The steps to move a VM from another virtualization environment like VMware VSphere would be almost identical.
+====
+
+== Access the Customer Data VM
+
+The RHV environment not only has the Oracle Database VM deployed but it also hosts another VM which runs the old customer application on top of Apache Tomcat.
+
+From a terminal window you can use `curl` to demonstrate that the application is connected to the database.
+
+Use the IP Address of the *Customer Service (Tomcat VM)* to access the customer service. You can run the following _curl_ command in the VS Code server's terminal or your local environment since the Tomcat IP address is publicly accessible. 
+
+Run the following `curl` commands in the VS Code server terminal.
+
+[.console-input]
+[source,bash]
+----
+curl http://%TOMCATIP%:8080/customers-tomcat-0.0.1-SNAPSHOT/customers/1 ; echo
+----
+
+The output should look like:
+
+[.console-output]
+[source,bash]
+----
+{"id":1,"username":"phlegm_master_19","name":"Guybrush","surname":"Threepwood","address":"1060 West Addison","zipCode":"ME-001","city":"Melee Town","country":"Melee Island"}
+----
+
+Try to get another customer data.
+
+[.console-input]
+[source,bash]
+----
+curl http://%TOMCATIP%:8080/customers-tomcat-0.0.1-SNAPSHOT/customers/2 ; echo
+----
+
+The output should look like:
+
+[.console-output]
+[source,bash]
+----
+{"id":2,"username":"hate_guybrush","name":"Pirate","surname":"Lechuck","address":"Caverns of Meat, no number","zipCode":"MO-666","city":"Giant Monkey Head","country":"Monkey Island"}
+----
+
+== Migrate the Oracle VM from RHV to OpenShift
+
+The steps you will follow to migrate the *customers* service from Red Hat Virtualization to Red Hat OpenShift Container Platform are as follows:
+
+* Migrate the *Oracle VM* from RHV to OpenShift Virtualization using the OpenShift Migration Toolkit for Virtualization
+* Modernize the Java source code for the *customers* application
+* Use the Tekton Pipeline to build and deploy the new, modernized application using Red Hat Web Server instead of Apache Tomcat as the runtime.
+* Set up the configuration for the *customer* service to connect to the Oracle database VM which is now running on OpenShift Container Platform
+* Test the *customer* service
+* Update the configuration for the *gateway* service to now point to the modernized *customer* service.
+* Demonstrate that your *frontend* service still works as before.
+
+=== Migrate the Oracle VM from RHV to OpenShift
+
+==== Prerequisites
+
+. In order to demonstrate the migration you will need the information that is being shared for the Workshop administrators. This information is not shared with students.
 +
-image::register-redhat-account.png[]
-. You are redirected to a registration form. Fill in the form.
-** Choose a *Personal* Account type
-** The login name has to be unique.
+From the RHPDS Workshop Service page find the following properties:
+
+* The *Hostname* of the RHV host
+* The *User ID* and *password* for the migration user - this is a specific user that can see most of what's available but only manipulate your specific VMs. You need this to connect to RHV.
+
+. Download the CA Certificate for your RHV environment. You need to do that on your laptop because you will need to drag the file into the MTV console later.
 +
-image::create-redhat-account.png[]
-. Please use a valid email address, as your email address will have to be verified later on when accessing the OpenShift Developer Sandbox.
-. Once you completed the form, click *Create My Account* to create your new Red Hat account.
-. You are redirected to a Terms and Conditions page. Accept the terms to finalize the creation of your account.
+[source,sh]
+----
+# Set this variable to the RHV hostname from the e-mail
+export RHV_HOST=<RHV_HOSTNAME>
+
+wget -O $HOME/pki-resource.cer --no-check-certificate "https://${RHV_HOSTNAME}/ovirt-engine/services/pki-resource?resource=ca-certificate&format=X509-PEM-CA"
+----
+
+. Or if you prefer the web browser:
+.. Navigate to `https://<RHV_HOSTNAME>/ovirt-engine/services/pki-resource?resource=ca-certificate&format=X509-PEM-CA` in your web browser (replace *<RHV_HOSTNAME>* with the hostname from your welcome e-mail - e.g. `rhvm.dev.cnv.infra.opentlc.com`).
+.. On most systems this will download a file `pki-resource.cer` into your `Downloads` folder.
+.. Take a note where this file got downloaded to. You will need it a little bit later.
+
+. Create a project in OpenShift for the migrated VM
 +
-image::terms-and-conditions.png[]
-. Click *Submit* to finalize the creation of your account.
-. You are redirected to the Red Hat Hybrid Cloud Console.
+[source,sh]
+----
+# Do not use any of the pre-provisioned projects called
+# retail-userX !!
+
+oc new-project retail
+----
+
+=== Set up Virtualization Provider in MTV
+
+. Log into the OpenShift Web Console using the URL and *admin* credentials provided
+. On the left click on *Virtualization* -> *Virtual Machines*
+. From the *Projects* drop down select the *retail* project that you just created.
+.. There are no Virtual Machines yet.
+. Click *Launch Migration Tool* to launch the OpenShift Migration Toolkit for Virtualization.
+. Log in using your *admin* credentials
+.. If this is the first time you are logging in click the blue *Get started* button.
+. On the list of *Providers* click *Add provider*
+. Select *Red Hat Virtualization* from the list of providers. Fill in the information from your e-mail:
+.. *Name*: `RHV`
+.. *RHV Manager host name or IP address*: The hostname from your e-mail. For example `rhvm.dev.cnv.infra.opentlc.com`
+.. *RHV Manager user name*: the username from your e-mail. For example `migrateuser-wkama@internal`
+.. *RHV Manager passsword*: the password from yoru e-mail. For example `niIEPihdCR7I`
+.. *CA Certificate*: Drop the previously downloaded CA Certificate File
+.. Click *Add*.
+. MTV will validate your provider and after a few seconds the status should switch to *Ready*.
+
+=== Create and execute Migration Plan
+
+. In the *Migration Toolkit for Virtualization* console navigate to *Migration Plans*.
+. Click *Create Plan*
+. On the *General* page use the following parameters:
+.. *Plan name*: `customers-database`
+.. *Source provider*: select the *RHV* source provider you previously created
+.. *Target provider*: select *host* (the OpenShift cluster you are currently on)
+.. *Target namespace*: select *retail*
+. Click *Next*
+. On the *VM Selection / Filter* page select the checkbox next to *All datacenters*
+. Click *Next*
+. On the *VM Selection / Select VMs* page select the VM that got created for you. You will find the name in your welcome e-mail (future). The name will be something like *oracle-XXXXX* where XXXXX is your GUID.
+. Click *Next*
+. On the *Network Mapping* page click on *Select a network mapping* and select *Create a network mapping*.
+. Leave the defaults and click *Next*
+. On the *Storage Mapping* page click on *Select a storage mapping* and select *Create a storage mapping*.
+. Change the *Target Storage Class* to `ceph-xxxx` and click *Next*
+. On the *Type* page select *Cold migration* and click *Next*
+. On the *Hooks* page click *Next*
+. On the *Review* page click *Finish*
+
+Now your Migration Plan is ready to use.
+
+To execute the plan click the *Start* button next to your *customers-database* migration plan and confirm by clicking the blue *Start* button in the popup window.
+
+Because you are running a *cold migration* the VM in RHV gets shutdown first.
+
+The migration will take about 15-25 minutes after which you will have a running Oracle database VM in your OpenShift cluster.
+
+Once the migration succeeds you will find a VM called `oracle-xxxxx` in your retail namespace.
+
+=== Post Migration Tasks:
+
+The VM is not yet reachable from other applications on the cluster. You will need to add a label to the VM and then create a service to be able to connect to the database on the VM.
+
+Both tasks are achieved by using the `virtctl expose` command. `virtctl` is the command line tool for OpenShift Virtualization and it has already been installed on the environment.
+
+. Expose the VM.
 +
-image::hybrid-cloud-console-landing-page.png[]
+[source,sh]
+----
+virtctl expose restart oracle-${GUID} -n retail
+----
+
+. Double check that the created service has the endpoint for the Oracle VM pod as an Endpoint:
++
+[source,sh]
+----
+oc describe svc oracle-${GUID} -n retail
+----
++
+.Sample Output
+[source,texinfo]
+----
+Name:              oracle-wkama
+Namespace:         retail
+Labels:            app=oracle-wkama
+Annotations:       <none>
+Selector:          app=oracle-wkama
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                172.30.4.130
+IPs:               172.30.4.130
+Port:              1521-1521  1521/TCP
+TargetPort:        1521/TCP
+Endpoints:         10.128.1.14:1521
+Port:              2022-22  2022/TCP
+TargetPort:        22/TCP
+Endpoints:         10.128.1.14:22
+Session Affinity:  None
+Events:            <none>
+----
+
+*Your Oracle Database is ready to be used*.

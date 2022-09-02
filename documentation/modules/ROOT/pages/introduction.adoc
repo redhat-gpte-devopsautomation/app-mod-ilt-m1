@@ -1,56 +1,36 @@
 = Introduction
 :imagesdir: ../assets/images
 
-== Globex's Digital Transformation Journey
+:numbered:
 
-Globex, a fictitious retail company, has recently started a digital transformation and cloud adoption journey. As part of this initiative, the development and devops teams have completed the modernization of their existing retail e-commerce web application. 
+== Understand the Globex Retail System Architecture
 
-A schematic overview of the current state of the application after the first phase of the application modernization effort:
+The Globex system (workshop environment) consists of microservices applications that are deployed across multiple platforms such as virtual machines and a container platform as depicted below.
 
-image::globex-phase1.png[width=60%]
+image::architecture_initial.png[architecture_initial]
 
-Taking advantage of this new momentum, the business comes up with new requirements for the e-commerce application including 
+Your initial state for this workshop is an environment that is spread over Red Hat Virtualization and Red Hat OpenShift Container Platform.
 
-* Multi-channel approach which includes a mobile application in addition to the retail web-site. 
-* The ability to track user activity on various channels
-* Highlight products which generate most customer interest as featured products.
+Your application has already been partially moved from your legacy environments to OpenShift.
 
-=== Challenges
+The Globex retail system is multiple services consisting of a _Node.js_ *frontend* service which is getting its data via a *gateway* service. The gateway service is connected to three backend services such as *customers*, *orders* and *inventory*. Each service uses its own database to store data.
 
-There are however a number of challenges with the new requirements
+The services running on OpenShift are deployed in a namespace `retail-%USERID%`. The services are eventually managed using the *OpenShift GitOps* and *Pipelines* in a later module.
 
-* Adding new channels remains difficult, with a high risk of tight coupling to the existing services
-* Managing, securing and governance to allow access for external partners and development teams
-* Adoption of new technologies requires time and new skills, which are not readily available inside the company.
+[NOTE]
+====
+Initially you are using the customers VM on Red Hat Virtualization.
 
-=== Solution Approach
-In order to cope with these challenges,  +
+You might see the customers pod is failed to run due to _ImagePullBackOff Error_. It will be fixed when you finish in the OpenShift CI/CD and GitOps module. This is because you have not created the container image for the modernized customer application.
+====
 
-* The team decides to adopt an *API First approach* for rapid development across teams
-* Since Globex does not want to allow direct access to the backend API services to external channels, access is only allowed through an API Management platform. 
-* A preference for *managed cloud services* for an easy and rapid adoption of new middleware components, which allows the teams to focus on the business requirements, without the need to invest in skills and infrastructure to deploy and maintain these components.
+All source code for the applications as well as the GitOps YAML manifests for all services are stored in a (GitHub compatible) *Gitea* repository that for workshop purposes is hosted on the OpenShift cluster.
 
-== Goals of this lab
-In this module you will follow this journey:
+The problem right now is the *customers* service:
 
-* *Design* an API resulting in an OpenAPI schema
-* Host this OpenAPI schema in a *registry* for use by various teams
-* *Mock* the APIs to enable faster inner loop development
-* *Manage and secure* APIs to allow access for external teams
+* The customers service uses an old Java code base running on `Apache Tomcat` in a VM on `Red Hat Virtualization`. In this module you will assess and analyze the legacy Java application (customers) to learn the way you can modernize the Java code and then deploy the application to OpenShift on top of Red Hat JBoss Web Server.
+* The customers database is using an `Oracle database` running as a VM in Red Hat Virtualization. Because this is Oracle you can not deploy the database as a Pod on OpenShift - therefore you will have a new virtual machine based on `OpenShift Virtualization` migrated by the `OpenShift Migration Toolkit for Virtualization`.
 
+When you have finished the all modules in this demo, your TO-BE deployment architecture should look like this:
 
-== Runtime Architecture
-
-image::globex-runtime-apim.png[width=100%]
-
-
-== Deployment Architecture
-
-Here is a view of the deployment architecture. +
-
-image::globex-deployment-apim.png[]
-
-
-* The Inventory and Catalog services are deployed on Red Hat OpenShift running on the cloud
-* Red Hat OpenShift API Management is a Red Hat managed services running on OpenShift Dedicate
-* Red Hat OpenShift API Designer and Red Hat OpenShift Service Registry are running as fully managed and hosted services accessed through http://console.redhat.com[http://console.redhat.com^, window=redhatconsole]
+image::architecture_completed.png[architecture_completed]
