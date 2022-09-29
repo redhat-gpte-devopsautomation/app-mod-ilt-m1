@@ -155,6 +155,7 @@ image::admin_credentials.png[width=40%]
 .. You will see that when *All Projects* is selected there are already VMs named `oracle-database` available for each user.
 . From the *Projects* drop down select the *retail* project that you just created.
 .. There are no Virtual Machines yet since you just created that project.
+. Click on *Virtualization* -> *Overview*.
 . Click *Launch Migration Tool* to launch the OpenShift Migration Toolkit for Virtualization.
 . Log in using your *admin* credentials (the same you used to log into the OpenShift Web Console).
 .. If this is the first time you are logging in click the blue *Get started* button.
