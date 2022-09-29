@@ -106,9 +106,13 @@ image::rhv_access.png[width=60%]
 [source,sh]
 ----
 # Set this variable to the RHV hostname from the e-mail
-export RHV_HOST=<RHV_HOSTNAME>
+export RHV_HOSTNAME=<RHV_HOSTNAME>
 
+# If you prefer wget
 wget -O $HOME/pki-resource.cer --no-check-certificate "https://${RHV_HOSTNAME}/ovirt-engine/services/pki-resource?resource=ca-certificate&format=X509-PEM-CA"
+
+# If you prefer curl
+curl --output $HOME/pki-resource.cer --insecure "https://${RHV_HOSTNAME}/ovirt-engine/services/pki-resource?resource=ca-certificate&format=X509-PEM-CA"
 ----
 
 . Or if you prefer the web browser:
